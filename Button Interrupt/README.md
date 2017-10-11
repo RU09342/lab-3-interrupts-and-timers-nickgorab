@@ -1,30 +1,65 @@
-# Button Interrupt
-Last lab you were introduced to the idea of "Polling" where in you would constantly check the status of the P1IN register to see if something has changed. While your code may have worked, it ends up spending a ton of time just checking something that has not changed. What we can do instead is use another two registers available to us from the GPIO peripheral, P1IE and P1IES, to allow our processor to just chill out and wait until something happens to act upon it. Without spending too much space on this README with explanations, what makes these interrupts tick is the following code:
+# Button Blink
+This program blinks an LED with the push of a button using an interrupt instead of polling. 
 
-'''c
+## Code Architecture
+### Dependencies 
+The `buttonBlink.c` code depends on two separate files. The first file is the generic MSP430  header (`msp430.h`), and a config file (`config.h`) which assigns the correct pins for each board. For more information about these, visit their respective `README.h` files.
+
+```c
+#include <msp430.h>
+#include <config.h>
+```
+This is the section of the code which is used to include the header files.
+### Functions 
+
+#### Button Initialization
+
+In order to make the code easier to digest, a void function was used to initialize the button.
+```c
+void buttonInit(void)
+```
+Inside of this function the button pin is declared an input, and the resistor is enabled and assigned to the pull up position. Additionally, the interrupt on the button pin is enabled, cleared, and set to falling edge. This function is then called inside of the main function and reduces the amount of possibly confusing code. The lines of code used to initialize the code are found below. 
+```c 
+B1_DIR |= ~BUTTON1;
+B1_REN |= BUTTON1; 
+B1_OUT |= BUTTON1; 
+B1_IE  |= BUTTON1; 
+B1_IES |= ~BUTTON1;
+B1_IFG &= ~BUTTON1;
+```
+
+
+
+
+#### Main
+
+In the main file there is no use of interrupts, so the Watch Dog timer needed to be disabled using the line 
+```c
+WDTCTL = WDTPW+WDTHOLD;
+```
+With the FR6989, FR2311, and FR5994 needing high impedance mode to be disabled, the line 
+```c
+HIGHZ;
+```
+is used to disable it. This is a macro defined in the config.h header file, and it will disable the high impedance mode for the specified board. For the other boards, it just opeartaes as a no-op. 
+
+This project serves as a basic introduction to interrupts, so once the LED is set as an output using the line:
+```c
+L1_DIR |= LED1;
+```
+The program will just wait for an interrupt to occur. In order to save power while waiting for the interrupt, low-power mode is entered using the line found below.
+```c
+_BIS_SR(LPM0_bits + GIE);
+```
+This disables the CPU until an interrupt happens. The `GIE` bit at the end enables global interrupts. While there are other Low-Power modes that use less power, this one will cause the least amount of changes that need to be made in the code, preventing the timer source from changing.
+
+#### Button ISR
+When the button interrupt occurs, the ISR is entered. Inside of the button ISR, the LED is toggled in the same fashion as the previous labs, by XORing the LED bit. The button ISR is found below.
+```c
 #pragma vector=PORT1_VECTOR
-__interrupt void Port_1(void)
-{
+__interrupt void Port_1(void) {
+
+    L1_OUT ^= LED1;     // Toggles the LED on Pin 1.0 via XOR
+    B1_IFG &= ~BUTTON1;    // Pin 1.1 Flag cleared
 }
-'''
-
-While you still need to initialize the Ports to be interrupt enabled and clear the flags, this "Pragma Vector" tells the compiler that when a particular interrupt occurs, run this code. 
-
-## A word of caution...
-While you might be willing to just jump straight in and begin using example code you may find, I would seriously take a few minutes and find a few good videos or tutorials to help understand exactly what is happening in the processor. I implore you to do this since you will inevitably have issues in the future which are solved by not understanding how the processor processes interrupts. A prime example is when I once tried implementing UART and I did not realize that you had to clear a flag or else my code would get stuck in an infinite loop. Hours of my life are now gone thanks to me at the time not understanding how interrupts worked with the peripherals I was utilizing. A few resources I have used in the past include:
-* https://youtu.be/GR8S2XT47eI?t=1334
-* http://processors.wiki.ti.com/index.php/MSP430_LaunchPad_Interrupt_vs_Polling
-* http://www.simplyembedded.org/tutorials/msp430-interrupts/
-
-## Task
-Your goal for this part of the lab is to replicate your button code from Lab 2, where the LED should change states only when the button is pressed. This can be extended to include behaviors such as only have the LED on when the button is depressed, or have the LED blink one color when pressed and another when it is let go. Another behavior extends from the second lab which is speed control based on the button presses. For example, have the rate of the LED cycle between a "low", "Medium", and "High" rate of speed.
-
-## Extra Work 
-### Binary Counter/Shift Register
-Either use a function generator, another processor, or a button to control your microcontroller as an 8-bit binary counter using 8 LEDs to indicate the current status of the counter.
-
-### Multiple Buttons
-Come up with a behavior of your own that incorporates needing to use two buttons or more and these two buttons must be implemented using interrupts.
-
-### (Recommended) Energy Trace
-Using the built in EnergyTrace(R) software in CCS and the corresponding supporting hardware on the MSP430 development platforms, analyze the power consumption between the button based blink code you wrote last week versus this week. What can you do to decrease the amount of power used within the microcontroller in this code? Take a look at the MSP430FR5994 and the built in SuperCap and see how long your previous code and the new code lasts. For a quick intro to EnergyTrace(R), take a look at this video: https://youtu.be/HqeDthLrcsg
+```
